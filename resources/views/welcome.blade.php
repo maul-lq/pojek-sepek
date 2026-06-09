@@ -83,7 +83,7 @@
 
         </div>
     </main>
-
+<!-- Footer -->
     <footer>
         <div class="footer-brand"><span>SKIN</span>DECIDE</div>
         <div class="footer-copy">&copy; 2026 Promethee Team</div>
