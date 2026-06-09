@@ -11,7 +11,9 @@
     @vite(['resources/css/welcome.css', 'resources/js/welcome.js'])
 </head>
 <body style="{{ $customBackgroundStyle }}" data-custom-background-url="{{ $customBackgroundUrl }}" data-criterias='@json($criterias)' data-saved-inputs='@json($savedWelcomeInputs)'>
-
+    <!-- Header
+    Yang fungsinya untuk link pengaturan dan menampilkan badge nama team, serta logo aplikasi. 
+    -->
     <header>
         <div class="logo">
             <div class="logo-dot"></div>
