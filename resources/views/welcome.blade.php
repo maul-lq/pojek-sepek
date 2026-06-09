@@ -11,7 +11,7 @@
     @vite(['resources/css/welcome.css', 'resources/js/welcome.js'])
 </head>
 <body style="{{ $customBackgroundStyle }}" data-custom-background-url="{{ $customBackgroundUrl }}" data-criterias='@json($criterias)' data-saved-inputs='@json($savedWelcomeInputs)'>
-
+<!-- Header -->
     <header>
         <div class="logo">
             <div class="logo-dot"></div>
@@ -81,7 +81,7 @@
 
         </div>
     </main>
-
+<!-- Footer -->
     <footer>
         <div class="footer-brand"><span>SKIN</span>DECIDE</div>
         <div class="footer-copy">&copy; 2026 Promethee Team</div>
