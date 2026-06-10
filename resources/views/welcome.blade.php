@@ -66,19 +66,30 @@
                     <div class="hasil-divider"></div>
                 </div>
                 <div class="table-wrap">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th class="table-rank-col">#</th>
-                                <th>Nama Skin</th>
-                                <th>Leaving Flow</th>
-                                <th>Entering Flow</th>
-                                <th class="th-score">Net Flow</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabel-hasil"></tbody>
-                    </table>
+                    <div class="result-table-scroll">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="table-rank-col">#</th>
+                                    <th>Nama Skin</th>
+                                    <th>Leaving Flow</th>
+                                    <th>Entering Flow</th>
+                                    <th class="th-score">Net Flow</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabel-hasil"></tbody>
+                        </table>
+                    </div>
+                    <div class="result-action">
+                        <button type="button" class="btn-detail-calculation" id="btn-detail-calculation" aria-expanded="false" aria-controls="detail-calculation">
+                            <span>Detail Perhitungan</span>
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                                <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
+                <div class="detail-calculation" id="detail-calculation" role="region" aria-label="Rincian perhitungan PROMETHEE" hidden></div>
             </div>
 
         </div>
