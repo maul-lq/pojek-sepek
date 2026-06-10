@@ -30,6 +30,8 @@ class SkinRecommendationTest extends TestCase
         $response->assertDontSee('<span>Skin</span> Terbaik</span></h1>', false);
         $response->assertDontSee('onsubmit="prosesHitung(event)"', false);
         $response->assertDontSee('onclick="tambahBarisSkin()"', false);
+        $response->assertSee('id="btn-detail-calculation"', false);
+        $response->assertSee('id="detail-calculation"', false);
     }
 
     public function test_recommendation_api_returns_ranked_skin_results(): void
@@ -55,6 +57,16 @@ class SkinRecommendationTest extends TestCase
                 'status',
                 'rekomendasi' => [
                     '*' => ['name', 'code', 'leaving_flow', 'entering_flow', 'net_flow', 'rank'],
+                ],
+                'perhitungan' => [
+                    'rankings',
+                    'alternatives',
+                    'criteria',
+                    'deviations',
+                    'criterion_preferences',
+                    'pairwise_comparisons',
+                    'preference_indices',
+                    'flows',
                 ],
             ]);
     }

@@ -25,14 +25,99 @@ class Promethee
      */
     public function calculate(array $alternatives, array $criteria): array
     {
+        return $this->calculateDetails($alternatives, $criteria)['rankings'];
+    }
+
+    /**
+     * @param  array<int, array{name?: string, scores?: array<int|string, numeric-string|int|float>}>  $alternatives
+     * @param  array<int, array{id: int|string, name?: string, direction?: string, min_max?: string, weight?: numeric-string|int|float, type?: string|int, preference_function?: string|int, p?: numeric-string|int|float|null, q?: numeric-string|int|float|null, s?: numeric-string|int|float|null}>  $criteria
+     * @return array{
+     *     rankings: array<int, array{name: string, leaving_flow: float, entering_flow: float, net_flow: float, rank: int, code: string|null}>,
+     *     alternatives: array<int, array{name: string, code: string|null}>,
+     *     criteria: array<int, array{id: int|string, name: string, direction: string, weight: float, preference_function: string}>,
+     *     deviations: array<int|string, array<int, array<int, float|null>>>,
+     *     criterion_preferences: array<int|string, array<int, array<int, float|null>>>,
+     *     pairwise_comparisons: array<int, array{alternative_a: string, alternative_b: string, deviations: array<int|string, float>, criterion_preferences: array<int|string, float>}>,
+     *     preference_indices: array<int, array<int, float|null>>,
+     *     flows: array<int, array{name: string, leaving_flow: float, entering_flow: float, net_flow: float}>
+     * }
+     */
+    public function calculateDetails(array $alternatives, array $criteria): array
+    {
         $this->guardInput($alternatives, $criteria);
 
         $normalizedAlternatives = $this->normalizeAlternatives($alternatives);
         $normalizedCriteria = $this->normalizeCriteria($criteria);
-        $globalPreference = $this->globalPreferenceMatrix($normalizedAlternatives, $normalizedCriteria);
+        $deviations = $this->deviationMatrices($normalizedAlternatives, $normalizedCriteria);
+        $criterionPreferences = $this->criterionPreferenceMatrices($deviations, $normalizedCriteria);
+        $globalPreference = $this->globalPreferenceMatrix($criterionPreferences, $normalizedCriteria);
         $flows = $this->flows($globalPreference);
 
-        return $this->rank($normalizedAlternatives, $flows);
+        return [
+            'rankings' => $this->rank($normalizedAlternatives, $flows),
+            'alternatives' => array_map(static fn (array $alternative): array => [
+                'name' => $alternative['name'],
+                'code' => $alternative['code'],
+            ], $normalizedAlternatives),
+            'criteria' => array_map(static fn (array $criterion): array => [
+                'id' => $criterion['id'],
+                'name' => $criterion['name'],
+                'direction' => $criterion['direction'],
+                'weight' => $criterion['weight'],
+                'preference_function' => $criterion['preference_function'],
+            ], $normalizedCriteria),
+            'deviations' => $deviations,
+            'criterion_preferences' => $criterionPreferences,
+            'pairwise_comparisons' => $this->pairwiseComparisons(
+                $normalizedAlternatives,
+                $normalizedCriteria,
+                $deviations,
+                $criterionPreferences,
+            ),
+            'preference_indices' => $globalPreference,
+            'flows' => $this->flowRows($normalizedAlternatives, $flows),
+        ];
+    }
+
+    /**
+     * @param  array<int, array{name: string, code: string|null, scores: array<int|string, float>}>  $alternatives
+     * @param  array<int, array{id: int|string, name: string, direction: string, weight: float, preference_function: string, p: float, q: float, s: float}>  $criteria
+     * @param  array<int|string, array<int, array<int, float|null>>>  $deviations
+     * @param  array<int|string, array<int, array<int, float|null>>>  $criterionPreferences
+     * @return array<int, array{alternative_a: string, alternative_b: string, deviations: array<int|string, float>, criterion_preferences: array<int|string, float>}>
+     */
+    private function pairwiseComparisons(
+        array $alternatives,
+        array $criteria,
+        array $deviations,
+        array $criterionPreferences,
+    ): array {
+        $comparisons = [];
+
+        foreach ($alternatives as $aIndex => $alternativeA) {
+            foreach ($alternatives as $bIndex => $alternativeB) {
+                if ($aIndex === $bIndex) {
+                    continue;
+                }
+
+                $comparison = [
+                    'alternative_a' => $alternativeA['name'],
+                    'alternative_b' => $alternativeB['name'],
+                    'deviations' => [],
+                    'criterion_preferences' => [],
+                ];
+
+                foreach ($criteria as $criterion) {
+                    $criterionId = $criterion['id'];
+                    $comparison['deviations'][$criterionId] = $deviations[$criterionId][$aIndex][$bIndex];
+                    $comparison['criterion_preferences'][$criterionId] = $criterionPreferences[$criterionId][$aIndex][$bIndex];
+                }
+
+                $comparisons[] = $comparison;
+            }
+        }
+
+        return $comparisons;
     }
 
     /**
@@ -46,7 +131,6 @@ class Promethee
     {
         return $this->calculate($alternatives, $criteria);
     }
-
 
     /**
      * @param  array<string, float|string|int|null>  $criterion
@@ -140,28 +224,84 @@ class Promethee
      * @param  array<int, array{id: int|string, name: string, direction: string, weight: float, preference_function: string, p: float, q: float, s: float}>  $criteria
      * @return array<int, array<int, float>>
      */
-    private function globalPreferenceMatrix(array $alternatives, array $criteria): array
+    private function deviationMatrices(array $alternatives, array $criteria): array
     {
         $matrix = [];
+
+        foreach ($criteria as $criterion) {
+            $criterionId = $criterion['id'];
+            $matrix[$criterionId] = [];
+
+            foreach ($alternatives as $aIndex => $alternativeA) {
+                $matrix[$criterionId][$aIndex] = [];
+
+                foreach ($alternatives as $bIndex => $alternativeB) {
+                    if ($aIndex === $bIndex) {
+                        $matrix[$criterionId][$aIndex][$bIndex] = null;
+
+                        continue;
+                    }
+
+                    $scoreA = (float) ($alternativeA['scores'][$criterionId] ?? 0.0);
+                    $scoreB = (float) ($alternativeB['scores'][$criterionId] ?? 0.0);
+                    $matrix[$criterionId][$aIndex][$bIndex] = $criterion['direction'] === 'min'
+                        ? $scoreB - $scoreA
+                        : $scoreA - $scoreB;
+                }
+            }
+        }
+
+        return $matrix;
+    }
+
+    /**
+     * @param  array<int|string, array<int, array<int, float|null>>>  $deviations
+     * @param  array<int, array{id: int|string, name: string, direction: string, weight: float, preference_function: string, p: float, q: float, s: float}>  $criteria
+     * @return array<int|string, array<int, array<int, float|null>>>
+     */
+    private function criterionPreferenceMatrices(array $deviations, array $criteria): array
+    {
+        $matrices = [];
+
+        foreach ($criteria as $criterion) {
+            $criterionId = $criterion['id'];
+
+            foreach ($deviations[$criterionId] as $aIndex => $row) {
+                foreach ($row as $bIndex => $deviation) {
+                    $matrices[$criterionId][$aIndex][$bIndex] = $deviation === null
+                        ? null
+                        : $this->preference($deviation, $criterion);
+                }
+            }
+        }
+
+        return $matrices;
+    }
+
+    /**
+     * @param  array<int|string, array<int, array<int, float|null>>>  $criterionPreferences
+     * @param  array<int, array{id: int|string, name: string, direction: string, weight: float, preference_function: string, p: float, q: float, s: float}>  $criteria
+     * @return array<int, array<int, float|null>>
+     */
+    private function globalPreferenceMatrix(array $criterionPreferences, array $criteria): array
+    {
+        $matrix = [];
+        $alternativeCount = count(reset($criterionPreferences));
         $totalWeight = array_sum(array_column($criteria, 'weight'));
 
-        foreach ($alternatives as $aIndex => $alternativeA) {
-            $matrix[$aIndex] = [];
-
-            foreach ($alternatives as $bIndex => $alternativeB) {
+        for ($aIndex = 0; $aIndex < $alternativeCount; $aIndex++) {
+            for ($bIndex = 0; $bIndex < $alternativeCount; $bIndex++) {
                 if ($aIndex === $bIndex) {
+                    $matrix[$aIndex][$bIndex] = null;
+
                     continue;
                 }
 
                 $weightedPreference = 0.0;
 
                 foreach ($criteria as $criterion) {
-                    $criterionId = $criterion['id'];
-                    $scoreA = (float) ($alternativeA['scores'][$criterionId] ?? 0.0);
-                    $scoreB = (float) ($alternativeB['scores'][$criterionId] ?? 0.0);
-                    $deviation = $criterion['direction'] === 'min' ? $scoreB - $scoreA : $scoreA - $scoreB;
-
-                    $weightedPreference += $this->preference($deviation, $criterion) * $criterion['weight'];
+                    $weightedPreference += ($criterionPreferences[$criterion['id']][$aIndex][$bIndex] ?? 0.0)
+                        * $criterion['weight'];
                 }
 
                 $matrix[$aIndex][$bIndex] = $weightedPreference / $totalWeight;
@@ -172,7 +312,7 @@ class Promethee
     }
 
     /**
-     * @param  array<int, array<int, float>>  $globalPreference
+     * @param  array<int, array<int, float|null>>  $globalPreference
      * @return array{leaving: array<int, float>, entering: array<int, float>}
      */
     private function flows(array $globalPreference): array
@@ -195,6 +335,26 @@ class Promethee
         }
 
         return ['leaving' => $leavingFlow, 'entering' => $enteringFlow];
+    }
+
+    /**
+     * @param  array<int, array{name: string, code: string|null, scores: array<int|string, float>}>  $alternatives
+     * @param  array{leaving: array<int, float>, entering: array<int, float>}  $flows
+     * @return array<int, array{name: string, leaving_flow: float, entering_flow: float, net_flow: float}>
+     */
+    private function flowRows(array $alternatives, array $flows): array
+    {
+        return array_map(static function (array $alternative, int $index) use ($flows): array {
+            $leaving = $flows['leaving'][$index];
+            $entering = $flows['entering'][$index];
+
+            return [
+                'name' => $alternative['name'],
+                'leaving_flow' => round($leaving, 4),
+                'entering_flow' => round($entering, 4),
+                'net_flow' => round($leaving - $entering, 4),
+            ];
+        }, $alternatives, array_keys($alternatives));
     }
 
     /**

@@ -76,7 +76,7 @@ class SkinRecommendationController extends Controller
         })->toArray();
 
         try {
-            $hasilPeringkat = $promethee->calculate(
+            $calculation = $promethee->calculateDetails(
                 $validator->validated()['alternatives'],
                 $criteriaData,
             );
@@ -89,7 +89,8 @@ class SkinRecommendationController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'rekomendasi' => $hasilPeringkat,
+            'rekomendasi' => $calculation['rankings'],
+            'perhitungan' => $calculation,
         ]);
     }
 

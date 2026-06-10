@@ -42,6 +42,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const clearSavedButton = document.getElementById('btn-clear-saved');
     const container = document.getElementById('container-alternatif');
     const sectionHasil = document.getElementById('section-hasil');
+    const detailButton = document.getElementById('btn-detail-calculation');
+    const detailCalculation = document.getElementById('detail-calculation');
 
     // Jika element SPK di bawah ini tidak lengkap, abaikan sisa kode SPK tanpa merusak background
     if (!form || !addButton || !container || !sectionHasil) {
@@ -52,6 +54,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
     let urutanSkin = 0;
     let saveTimeout = null;
+    let latestCalculation = null;
 
     addButton.addEventListener('click', () => {
         tambahBarisSkin();
@@ -59,6 +62,8 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     clearSavedButton?.addEventListener('click', clearSavedInputs);
+    detailButton?.addEventListener('click', toggleCalculationDetails);
+    detailCalculation?.addEventListener('click', handleCalculationTabClick);
     form.addEventListener('submit', prosesHitung);
     container.addEventListener('click', handleContainerClick);
     container.addEventListener('input', schedulePersistWelcomeInputs);
@@ -333,6 +338,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
             container.innerHTML = '';
             sectionHasil.classList.remove('visible');
+            resetCalculationDetails();
             urutanSkin = 0;
             tambahBarisSkin();
             tambahBarisSkin();
@@ -408,6 +414,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
             if (hasil.status === 'success') {
                 tampilkanTabelHasil(hasil.rekomendasi);
+                latestCalculation = hasil.perhitungan ?? null;
+                renderCalculationDetails();
             } else {
                 shakeAlert(hasil.message || 'Terjadi kesalahan sistem.');
             }
@@ -471,5 +479,248 @@ window.addEventListener('DOMContentLoaded', () => {
 
         sectionHasil.classList.add('visible');
         sectionHasil.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function toggleCalculationDetails() {
+        if (!detailButton || !detailCalculation || !latestCalculation) {
+            return;
+        }
+
+        const isExpanded = detailButton.getAttribute('aria-expanded') === 'true';
+        detailButton.setAttribute('aria-expanded', String(!isExpanded));
+        detailCalculation.hidden = isExpanded;
+
+        if (!isExpanded) {
+            detailCalculation.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    function resetCalculationDetails() {
+        latestCalculation = null;
+
+        if (detailButton) {
+            detailButton.setAttribute('aria-expanded', 'false');
+        }
+
+        if (detailCalculation) {
+            detailCalculation.hidden = true;
+            detailCalculation.innerHTML = '';
+        }
+    }
+
+    function renderCalculationDetails() {
+        if (!detailButton || !detailCalculation || !latestCalculation) {
+            return;
+        }
+
+        const alternatives = latestCalculation.alternatives ?? [];
+        const criteria = latestCalculation.criteria ?? [];
+
+        detailCalculation.innerHTML = `
+            <div class="detail-calculation-header">
+                <div>
+                    <span class="detail-calculation-kicker">Audit PROMETHEE</span>
+                    <h3>Rincian Perhitungan Alternatif</h3>
+                </div>
+                <p>Pilih tahap perhitungan untuk melihat tabel tanpa memanjangkan halaman.</p>
+            </div>
+            <div class="calculation-tabs" role="tablist" aria-label="Tahap perhitungan PROMETHEE">
+                ${renderCalculationTabButton('deviation', 'Tabel Deviasi', true)}
+                ${renderCalculationTabButton('preference', 'Preferensi Kriteria')}
+                ${renderCalculationTabButton('index', 'Indeks Preferensi')}
+                ${renderCalculationTabButton('flow', 'Flow')}
+            </div>
+            ${renderCalculationTabPanel('deviation', renderPairwiseCriteriaTable('Tabel Deviasi', 'deviations', criteria), true)}
+            ${renderCalculationTabPanel('preference', renderPairwiseCriteriaTable('Preferensi Kriteria', 'criterion_preferences', criteria))}
+            ${renderCalculationTabPanel('index', renderPreferenceIndexTable(alternatives))}
+            ${renderCalculationTabPanel('flow', renderFlowTable())}
+        `;
+
+        detailCalculation.hidden = true;
+        detailButton.setAttribute('aria-expanded', 'false');
+    }
+
+    function renderCalculationTabButton(tabName, label, isActive = false) {
+        return `
+            <button type="button" class="calculation-tab${isActive ? ' is-active' : ''}" role="tab"
+                id="calculation-tab-${tabName}" data-calculation-tab="${tabName}"
+                aria-controls="calculation-panel-${tabName}" aria-selected="${isActive}">
+                ${label}
+            </button>
+        `;
+    }
+
+    function renderCalculationTabPanel(tabName, content, isActive = false) {
+        return `
+            <section class="calculation-tab-panel${isActive ? ' is-active' : ''}" role="tabpanel"
+                id="calculation-panel-${tabName}" aria-labelledby="calculation-tab-${tabName}"${isActive ? '' : ' hidden'}>
+                ${content}
+            </section>
+        `;
+    }
+
+    function handleCalculationTabClick(event) {
+        const selectedTab = event.target.closest('[data-calculation-tab]');
+
+        if (!selectedTab || !detailCalculation) {
+            return;
+        }
+
+        detailCalculation.querySelectorAll('[data-calculation-tab]').forEach((tab) => {
+            const isSelected = tab === selectedTab;
+            tab.classList.toggle('is-active', isSelected);
+            tab.setAttribute('aria-selected', String(isSelected));
+        });
+
+        detailCalculation.querySelectorAll('.calculation-tab-panel').forEach((panel) => {
+            const isSelected = panel.id === `calculation-panel-${selectedTab.dataset.calculationTab}`;
+            panel.classList.toggle('is-active', isSelected);
+            panel.hidden = !isSelected;
+        });
+    }
+
+    function renderPairwiseCriteriaTable(title, valueKey, criteria) {
+        const comparisons = latestCalculation.pairwise_comparisons ?? [];
+        const criteriaHeadings = criteria.map((criterion, index) => `
+            <th title="${escapeHtml(criterion.name)}">C${index + 1}</th>
+        `).join('');
+        const rows = comparisons.map((comparison) => {
+            const values = criteria.map((criterion) => `
+                <td>${formatCalculationNumber(comparison[valueKey]?.[criterion.id])}</td>
+            `).join('');
+
+            return `
+                <tr>
+                    <th>${escapeHtml(comparison.alternative_a)}</th>
+                    <th>${escapeHtml(comparison.alternative_b)}</th>
+                    ${values}
+                </tr>
+            `;
+        }).join('');
+
+        return `
+            <section class="calculation-card">
+                <div class="calculation-card-heading">
+                    <div>
+                        <span class="calculation-step">Perbandingan Berpasangan</span>
+                        <h4>${title}</h4>
+                    </div>
+                </div>
+                <div class="criteria-key">
+                    ${criteria.map((criterion, index) => `<span><strong>C${index + 1}</strong>${escapeHtml(criterion.name)}</span>`).join('')}
+                </div>
+                <div class="matrix-scroll">
+                    <table class="calculation-table pairwise-table">
+                        <thead><tr><th>A1</th><th>A2</th>${criteriaHeadings}</tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            </section>
+        `;
+    }
+
+    function renderPreferenceIndexTable(alternatives) {
+        const preferenceIndices = latestCalculation.preference_indices ?? [];
+        const flows = latestCalculation.flows ?? [];
+        const headings = alternatives.map((alternative) => `<th>${escapeHtml(alternative.name)}</th>`).join('');
+        const bodyRows = alternatives.map((alternative, rowIndex) => {
+            const cells = alternatives.map((_, columnIndex) => `
+                <td>${formatCalculationNumber(preferenceIndices?.[rowIndex]?.[columnIndex])}</td>
+            `).join('');
+
+            return `
+                <tr>
+                    <th>${escapeHtml(alternative.name)}</th>
+                    ${cells}
+                    <td class="flow-highlight">${formatCalculationNumber(flows?.[rowIndex]?.leaving_flow)}</td>
+                </tr>
+            `;
+        }).join('');
+        const enteringCells = alternatives.map((_, index) => `
+            <td class="flow-highlight">${formatCalculationNumber(flows?.[index]?.entering_flow)}</td>
+        `).join('');
+
+        return `
+            <section class="calculation-card">
+                <div class="calculation-card-heading">
+                    <div>
+                        <span class="calculation-step">Agregasi</span>
+                        <h4>Indeks Preferensi</h4>
+                    </div>
+                </div>
+                <div class="matrix-block">
+                    <div class="matrix-scroll">
+                        <table class="calculation-table preference-index-table">
+                            <thead>
+                                <tr>
+                                    <th>Alternatif</th>
+                                    ${headings}
+                                    <th>Leaving</th>
+                                </tr>
+                            </thead>
+                            <tbody>${bodyRows}</tbody>
+                            <tfoot>
+                                <tr>
+                                    <th>Entering Flow</th>
+                                    ${enteringCells}
+                                    <td>—</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        `;
+    }
+
+    function renderFlowTable() {
+        const flows = latestCalculation.flows ?? [];
+        const rows = flows.map((flow) => `
+            <tr>
+                <th>${escapeHtml(flow.name)}</th>
+                <td>${formatCalculationNumber(flow.leaving_flow)}</td>
+                <td>${formatCalculationNumber(flow.entering_flow)}</td>
+                <td class="${flowValueClass(flow.net_flow)}">${formatSignedNumber(flow.net_flow)}</td>
+            </tr>
+        `).join('');
+
+        return `
+            <section class="calculation-card">
+                <div class="calculation-card-heading">
+                    <div>
+                        <span class="calculation-step">Hasil Flow</span>
+                        <h4>Leaving, Entering, dan Net Flow</h4>
+                    </div>
+                </div>
+                <div class="matrix-scroll">
+                    <table class="calculation-table flow-summary-table">
+                        <thead><tr><th>Alternatif</th><th>Leaving</th><th>Entering</th><th>Net</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            </section>
+        `;
+    }
+
+    function formatCalculationNumber(value) {
+        if (value === null || value === undefined || Number.isNaN(Number(value))) {
+            return '—';
+        }
+
+        return Number(value).toFixed(4);
+    }
+
+    function formatSignedNumber(value) {
+        if (value === null || value === undefined || Number.isNaN(Number(value))) {
+            return '—';
+        }
+
+        const numericValue = Number(value);
+
+        return `${numericValue >= 0 ? '+' : ''}${numericValue.toFixed(4)}`;
+    }
+
+    function flowValueClass(value) {
+        return Number(value) >= 0 ? 'flow-positive' : 'flow-negative';
     }
 });
