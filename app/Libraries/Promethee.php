@@ -47,22 +47,6 @@ class Promethee
         return $this->calculate($alternatives, $criteria);
     }
 
-    /**
-     * @return array<int, array{id: int, name: string, direction: string, weight: float, preference_function: string, p: float, q: float, s: float}>
-     */
-    public static function skinCriteria(): array
-    {
-        return [
-            ['id' => 1, 'name' => 'Harga (Diamond)', 'direction' => 'min', 'weight' => 1.5, 'preference_function' => self::LINEAR, 'p' => 9000, 'q' => 0, 's' => 0],
-            ['id' => 2, 'name' => 'Kategori Skin', 'direction' => 'max', 'weight' => 1.2, 'preference_function' => self::LEVEL, 'p' => 4, 'q' => 1, 's' => 0],
-            ['id' => 3, 'name' => 'Model Skin', 'direction' => 'max', 'weight' => 1.0, 'preference_function' => self::LINEAR_QUASI, 'p' => 7, 'q' => 1, 's' => 0],
-            ['id' => 4, 'name' => 'Portrait Skin', 'direction' => 'max', 'weight' => 0.8, 'preference_function' => self::LINEAR_QUASI, 'p' => 7, 'q' => 1, 's' => 0],
-            ['id' => 5, 'name' => 'Animasi Entrance', 'direction' => 'max', 'weight' => 1.0, 'preference_function' => self::LINEAR_QUASI, 'p' => 7, 'q' => 1, 's' => 0],
-            ['id' => 6, 'name' => 'In-Game Effect', 'direction' => 'max', 'weight' => 1.4, 'preference_function' => self::LINEAR_QUASI, 'p' => 7, 'q' => 1, 's' => 0],
-            ['id' => 7, 'name' => 'Tingkat Preferensi Hero', 'direction' => 'max', 'weight' => 1.1, 'preference_function' => self::QUASI, 'p' => 0, 'q' => 2, 's' => 0],
-            ['id' => 8, 'name' => 'Status Ketersediaan Skin', 'direction' => 'max', 'weight' => 0.7, 'preference_function' => self::USUAL, 'p' => 0, 'q' => 0, 's' => 0],
-        ];
-    }
 
     /**
      * @param  array<string, float|string|int|null>  $criterion
